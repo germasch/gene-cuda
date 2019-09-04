@@ -1,0 +1,105 @@
+diff --git a/src/df_nonlinear_term.F90 b/src/df_nonlinear_term.F90
+index 18510cd3e..6cb236d99 100644
+--- a/src/df_nonlinear_term.F90
++++ b/src/df_nonlinear_term.F90
+@@ -25,6 +25,9 @@ module df_nonlinear_term_mod
+ 
+   type, public, extends(nonlinear_term_t) :: df_nonlinear_term_t
+      class(df_nonlinear_prefactor_t),allocatable,public :: prefactor
++#ifdef USE_GPU
++     type(C_PTR) :: nonlin
++#endif
+    contains
+      procedure :: initialize => initialize_nonlinearity
+      procedure :: finalize => finalize_nonlinearity
+@@ -42,6 +45,30 @@ module df_nonlinear_term_mod
+ 
+   private
+ 
++  interface
++
++     type(C_PTR) function nonlinearity_create(nx0, nky0, ny0, howmany, nib, &
++          radscheme, kjmin, pnl_1d, pnl_1d_shape, coeff, coeff_shape) bind(C)
++       import
++       integer(C_INT), value :: nx0, nky0, ny0, howmany, nib, radscheme
++       real(C_DOUBLE), value :: kjmin
++       real(C_DOUBLE), dimension(*) :: pnl_1d, coeff
++       integer(C_INT), dimension(1) :: pnl_1d_shape, coeff_shape
++     end function nonlinearity_create
++     
++     subroutine nonlinearity_destroy(nonlin) bind(C)
++       import
++       type(C_PTR), value :: nonlin
++     end subroutine nonlinearity_destroy
++
++     subroutine cu_transpose_and_extend_cmplx(in, in_shape, out, out_shape) bind(C)
++       import
++       complex(C_DOUBLE_COMPLEX) :: in, out
++       integer(C_INT), dimension(2) :: in_shape, out_shape
++     end subroutine cu_transpose_and_extend_cmplx
++
++  end interface
++  
+ contains
+ 
+   function getThisType(this)
+@@ -106,14 +133,31 @@ contains
+   end function mem_est_nonlinearity
+ 
+   subroutine initialize_nonlinearity(this)
++    use x_derivatives, only: radscheme, coeff
++    use coordinates, only: gcoor
+     class(df_nonlinear_term_t) :: this
+ 
++#ifdef USE_GPU
++    integer :: ub, li
++#endif
++
+     if (this%init_status==1) return
+     !write(*,"(3A,I5)") "Initializing ",this%getType()," with blocksize = ",this%lbg0
+     call initialize_fourier(gdisc%li0da,gdisc%ly0da)
+ 
+     call this%prefactor%initialize()
+ 
++#ifdef USE_GPU
++    if (n_procs_y == 1) then
++       ub = gdisc%li0/n_procs_y
++       li = gpdisc%pi1 + my_pey*ub !lower index for relevant pnl_1d part
++       this%nonlin = nonlinearity_create(gdisc%li2 - gdisc%li1 + 1, &
++            gdisc%lj2 - gdisc%lj1 + 1, gdisc%ly0da, this%lbg0, gdisc%nib, radscheme, &
++            gcoor%kjmin, this%prefactor%pnl_1d(li:li+ub-1), shape(this%prefactor%pnl_1d(li:li+ub-1)), &
++            coeff, shape(coeff))
++    endif
++#endif
++
+     this%init_status = 1
+   end subroutine initialize_nonlinearity
+ 
+@@ -127,6 +171,12 @@ contains
+ 
+     call finalize_fourier
+ 
++#ifdef USE_GPU
++    if (n_procs_y == 1) then
++       call nonlinearity_destroy(this%nonlin);
++    endif
++#endif
++
+     this%init_status = 0
+   end subroutine finalize_nonlinearity
+ 
+@@ -191,10 +241,10 @@ contains
+   !!\todo Check whether the nonlinearity prefactor is important for the CFL criterion
+   Subroutine calc_nonlinearity_df(this,gy_chi,g_block,vexy,dgdxy,localrhs,first,lb1,lb2)
+     class(df_nonlinear_term_t) :: this
+-    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:*),Intent(inout) :: gy_chi
+-    complex, dimension(gdisc%lbi:gdisc%ubi,gdisc%lj1:gdisc%lj2,1:*),intent(in) :: g_block
+-    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,2,1:*),Intent(inout) :: vexy, dgdxy
+-    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:*),Intent(inout) :: localrhs
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:this%lbg0),Intent(inout) :: gy_chi
++    complex, dimension(gdisc%lbi:gdisc%ubi,gdisc%lj1:gdisc%lj2,1:this%lbg0),intent(in) :: g_block
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,2,this%lbg0),Intent(inout) :: vexy, dgdxy
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:this%lbg0),Intent(inout) :: localrhs
+     Logical, Intent(in) :: first
+     Integer, Intent(in) :: lb1,lb2
+ 

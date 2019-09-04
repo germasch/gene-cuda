@@ -1,0 +1,99 @@
+diff --git a/src/df_arakawa_nonlinear_term.F90 b/src/df_arakawa_nonlinear_term.F90
+index 0c9fd61b2..f2b5ab587 100644
+--- a/src/df_arakawa_nonlinear_term.F90
++++ b/src/df_arakawa_nonlinear_term.F90
+@@ -25,6 +25,25 @@ module df_arakawa_nonlinear_term_mod
+      procedure :: getType => getThisType
+   end type df_arakawa_nonlinear_term_t
+ 
++#ifdef USE_GPU
++  interface
++     
++     subroutine c_nonlinearity_1(c_nonlin, gy_chi, gy_chi_shape, g2d, g2d_shape, &
++          vexy, vexy_shape, dgdxy, dgdxy_shape, &
++          localrhs, localrhs_shape, first, ve_max) bind(C)
++       import
++       type(C_PTR), value :: c_nonlin
++       complex(C_DOUBLE_COMPLEX), dimension(*) :: gy_chi, g2d, vexy, dgdxy
++       complex(C_DOUBLE_COMPLEX), dimension(*) :: localrhs
++       integer(C_INT), dimension(*) :: gy_chi_shape, g2d_shape, vexy_shape, dgdxy_shape
++       integer(C_INT), dimension(*) :: localrhs_shape
++       logical(C_BOOL), value :: first
++       real(C_DOUBLE), dimension(2) :: ve_max
++     end subroutine c_nonlinearity_1
++
++  end interface
++#endif
++  
+ contains
+ 
+   function getThisType(this)
+@@ -34,10 +53,29 @@ contains
+     getThisType = "df_arakawa_nonlinear_term_t"
+   end function getThisType
+ 
++#ifdef USE_GPU
++  subroutine calc_arakawa_nonlinearity_df_c(this, gy_chi, g_block, vexy, dgdxy, localrhs, first)
++    class(df_arakawa_nonlinear_term_t) :: this
++    complex, dimension(gdisc%li1:gdisc%li2, gdisc%lj1:gdisc%lj2, this%lbg0), intent(in) :: gy_chi
++    complex, dimension(gdisc%lbi:gdisc%ubi, gdisc%lj1:gdisc%lj2, this%lbg0), intent(in) :: g_block
++    complex, dimension(gdisc%li1:gdisc%li2, gdisc%lj1:gdisc%lj2, 2, this%lbg0), intent(in) :: vexy, dgdxy
++    complex, dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:this%lbg0), intent(inout) :: localrhs
++    logical, intent(in) :: first
++
++    complex, dimension(gdisc%li1:gdisc%li2, gdisc%lj1:gdisc%lj2,this%lbg0):: g2d
++
++    g2d = g_block(gdisc%li1:gdisc%li2,:,1:this%lbg0)
++    call c_nonlinearity_1(this%nonlin, gy_chi, shape(gy_chi), g2d, shape(g2d), &
++         vexy, shape(vexy), dgdxy, shape(dgdxy), localrhs, shape(localrhs), &
++         logical(first, C_BOOL), ve_max)
++    
++  end subroutine calc_arakawa_nonlinearity_df_c
++#endif
++  
+   !>Computes the nonlinearity for the (x) nonlocal version
+   !!\todo Get rid of transposition using striding? make some arrays for arakawa allocatable
+   !!\todo Check whether the nonlinearity prefactor is important for the CFL criterion
+-  Subroutine calc_arakawa_nonlinearity_df(this,gy_chi,g_block,vexy,dgdxy,localrhs,first,lb1,lb2)
++  Subroutine calc_arakawa_nonlinearity_df_orig(this,gy_chi,g_block,vexy,dgdxy,localrhs,first,lb1,lb2)
+     class(df_arakawa_nonlinear_term_t) :: this
+     Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:*),Intent(inout) :: gy_chi
+     complex, dimension(gdisc%lbi:gdisc%ubi,gdisc%lj1:gdisc%lj2,1:*),intent(in) :: g_block
+@@ -113,8 +151,36 @@ contains
+     ! multiply with the prefactor and write to localrhs
+     call this%prefactor%multiply_with(nonlin,localrhs,this%lbg0,lb1,lb2)
+ 
+-  End Subroutine calc_arakawa_nonlinearity_df
++  End Subroutine calc_arakawa_nonlinearity_df_orig
+ 
++  subroutine calc_arakawa_nonlinearity_df(this,gy_chi,g_block,vexy,dgdxy,localrhs,first,lb1,lb2)
++#ifdef USE_GPU
++    use x_derivatives, only: rad_bc_type
++#endif
++
++    class(df_arakawa_nonlinear_term_t) :: this
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:this%lbg0),Intent(inout) :: gy_chi
++    complex, dimension(gdisc%lbi:gdisc%ubi,gdisc%lj1:gdisc%lj2,1:this%lbg0),intent(in) :: g_block
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,2,1:this%lbg0),Intent(inout) :: vexy, dgdxy
++    Complex, Dimension(gdisc%li1:gdisc%li2,gdisc%lj1:gdisc%lj2,1:this%lbg0),Intent(inout) :: localrhs
++    Logical, Intent(in):: first
++    Integer, Intent(in):: lb1,lb2
++
++#ifdef USE_GPU
++    if (n_procs_y == 1 .and. n_procs_x == 1 .and. rad_bc_type == 1 .and. &
++         gdisc%yx_order .eqv. .false.) then
++       call calc_arakawa_nonlinearity_df_c(this, gy_chi, g_block, vexy, dgdxy, localrhs, first)
++    else
++       call calc_arakawa_nonlinearity_df_orig(this, gy_chi, g_block, vexy, dgdxy, localrhs, &
++            first, lb1, lb2);
++    endif
++#else
++    call calc_arakawa_nonlinearity_df_orig(this, gy_chi, g_block, vexy, dgdxy, localrhs, &
++         first, lb1, lb2);
++#endif
++       
++  end subroutine calc_arakawa_nonlinearity_df
++  
+   !> Go to real space
+   !! This routine is equal to the one of df_nonlinear_term, with the
+   !! small exception, that here it is clear, that we do not have
