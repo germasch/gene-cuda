@@ -76,8 +76,8 @@ The small kernel based ``add_dfdxy_df`` ends up being slower on the GPU compared
      - 66 ms = 461 ms / 7
      - 163 ms = 1143 ms / 7
    * - small kernel GPU
-     - 139 ms (excludes mem transfer)
-     - 173 ms / 9 ms (incl/excl mem transfer)
+     - 139 ms (kernels only)
+     - 9 ms (kernels only); 173 ms (total)
 
 GPU Large Kernels
 -----------------
@@ -109,16 +109,16 @@ What's particularly noteworthy is that the time for just the computation of ``ad
      - 66 ms = 461 ms / 7
      - 163 ms = 1143 ms / 7
    * - small kernel GPU
-     - 139 ms (excludes mem transfer)
-     - 173 ms / 9 ms (incl/excl mem transfer)
+     - 139 ms (kernels only)
+     - 9 ms (kernels only); 173 ms (total)
    * - large-kernel GPU
-     - 93 ms / 1 ms (incl/excl mem transfer)
-     - 123 ms / 9 ms (incl/excl mem transfer)
+     - 1 ms (kernels only); 93 ms (total)
+     - 9 ms (kernels only): 123 ms (total)
 
 Summary
 -------
 
 The table above basically tells the story. Going from 7 CPU cores to 1 GPU, the actual computation gets faster by a factor of 66x and 18x for ``add_dgdxy_df1`` and ``calc_arakawa_nonlinearity_df``, respectively, which are excellent numbers, even though no actual tuning of kernels was done. The difference in compute performance between small and large kernels (139 ms -> 1 ms) is enormous in this case. This might be less pronounced in a case that has much larger x-y slices, though.
 
-Not surprisingly, in absolute terms, the memory transfers are stil killing the performance. The conclusion from that is that ideally the entire timestep calculation should happen on the GPU eventually.
+Not surprisingly, in absolute terms, the memory transfers are stil killing the performance. The conclusion from that is what we already know: Ideally the entire timestep calculation should happen on the GPU eventually, to eliminate the host-device memory traffic (or at least greatly reduce it).
 
