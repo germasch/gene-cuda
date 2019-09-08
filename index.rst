@@ -31,3 +31,4 @@ Let start with some general comments and caveats:
    cmake
    nonlinearity
    array
+   case1/case1
