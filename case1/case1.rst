@@ -1,19 +1,19 @@
 
-Case study: small kernels / big kernels
-=======================================
+Case Study: Small Kernels vs Large Kernels
+==========================================
 
 Caveats
 -------
 
 * This is an arbitrary case that I picked pretty much randomly. Smaller / larger cases will behave differently, but the trends should be similar (I haven't tried).
 * The subroutines I focused on (``add_dgdxy_df1`` and ``calc_arakawa_nonlinearity_df``) are rather straightforward to port. Not everything's going to be this easy, and work that well.
-* The port assumes the simplest case, that is``nprocs_x = 1`` and ``nprocs_y = 1``. Other cases are doable, but more work, and having to communicate is not likely going to be good for performance.
+* The port assumes the simplest case, that is ``nprocs_x = 1`` and ``nprocs_y = 1``. Other cases are doable, but more work, and having to communicate is not likely going to be good for performance.
 * The case is run on 4 MPI procs / 4 GPUs on Summit. I'll divide the CPU timing by 7 to account for the 7:1 CPU core / GPU ratio.
 
 Parameters
 ----------
   
-The parameters I'musing are based on the big-8 test case. I set a fixed decomposition only in z, ``nprocs_z = 4``. I set ``istep_energy = 1`` to help with verifying that I'm not breaking things. ``perf_vec  =  1 1 1 1 1 1 1 1 1``. I commented out ``arakawa_zv`` and ``arakawa_zv_order``, I don't remember why. I ran for only wo timesteps. Problem size::
+The parameters I'musing are based on the big-8 test case. I set a fixed decomposition only in z, ``nprocs_z = 4``. I set ``istep_energy = 1`` to help with verifying that I'm not breaking things. ``perf_vec  =  1 1 1 1 1 1 1 1 1``. I commented out ``arakawa_zv`` and ``arakawa_zv_order``, I don't remember why. I ran for only two timesteps. Problem size::
 
    &box
    n_spec =    2
@@ -28,9 +28,9 @@ The parameters I'musing are based on the big-8 test case. I set a fixed decompos
 Overview
 --------
 
-Basically, I'm comparing CPU to existing GPU kernels to merged larger GPU kernels. You can just skip to the summary if you don't care about the details. In reality, I obtained these results kinda backwards, ie., once I had the big kernels working, I went back to the original small kernels, and to disabling the GPU (mostly) altogether. I used ``nvprof`` to collect all the data shown.
+Basically, I'm comparing three versions, (a) CPU to (b) existing GPU kernels to (c) merged larger GPU kernels. You can just skip to the summary if you don't care about the details. In reality, I obtained these results kinda backwards, ie., once I had the big kernels working, I went back to the original small kernels, and to disabling the GPU (mostly) altogether. I used ``nvprof`` to collect all the data shown.
 
-CPU version
+CPU Version
 -----------
 
 The timeline for the entire run shows the expected structure: Start-up and initialization, and then 2 timesteps with 4 RK stages each. There's a 5th repeat of the kernel calls, maybe because of the diagnostics I turned on -- I haven't bother to look into this.
