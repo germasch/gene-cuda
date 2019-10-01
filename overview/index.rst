@@ -50,11 +50,11 @@ lower-dimensional quantities like the electromagnetic
 field. Distribution functions are discretized in space (x, y, z),
 velocity space (v, w) and by species, The code often considers the
 distribution function arrays in a reshaped fashion, where it becomes
-$f(i, j, klmn)$, ie. many i-j (x-y) slices, where klmn collapses
+f(i, j, klmn), ie. many i-j (x-y) slices, where klmn collapses
 the remaining 4 dims (k, l, m, n). This is what the cache blocking
-is based on. If ``nblocks == 1``, all nk * nl * nm * nn$
+is based on. If ``nblocks == 1``, all nk * nl * nm * nn
 slices are processed together. However, if ``nblocks > 1``, nk *
-nl * nm * nn$ is subdivided into as many equal-sized pieces
+nl * nm * nn is subdivided into as many equal-sized pieces
 ("blocks"). Then, all operations are performed for just the first block,
 next all operations are performed on the second block, etc. In order
 to have a large amount of parallelism available for offloading onto
@@ -188,7 +188,7 @@ kernels, so some refactoring into bigger kernels is needed there.
 In terms of just looking at ``CalcFRhs0`` itself, the timing went from
 1.19 s (1 CPU core) to 27 ms (1 V100 GPU). This is of course an unfair
 comparison, but extrapolating given that Summit has 7 CPU cores / GPU,
-it's a speed-up of $6.3x$, which is at least a good start.
+it's a speed-up of 6.3x, which is at least a good start.
 
 
 
