@@ -60,7 +60,7 @@ next all operations are performed on the second block, etc. In order
 to have a large amount of parallelism available for offloading onto
 the GPU, it is helpful to have large blocks, so in my work I have been
 using ``nblocks = 1``, which for the test I've been using gives me a
-per-MPI process index space of 120 x 24 x 32 x 8 x 2 complex
+per-MPI process index space of 120 x 24 x 4 x 32 x 8 x 2 complex
 quanities, which is giving me pretty good results in terms of GPU
 performance already, but production runs are going to have yet larger
 problem sizes.
